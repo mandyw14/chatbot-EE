@@ -134,7 +134,7 @@ Dataset search results:
 """
 
    with st.chat_message("assistant"):
-        stream = client.chat.completions.create(
+       stream = client.chat.completions.create(
             model=st.session_state["openai_model"],
             messages=[
                 {"role": "system", "content": system_prompt},
