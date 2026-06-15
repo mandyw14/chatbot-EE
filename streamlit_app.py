@@ -1,5 +1,6 @@
 from openai import OpenAI
 import streamlit as st
+import pandas as pd
 
 st.title("Evidence Explorer")
 
@@ -7,7 +8,15 @@ client = OpenAI(
     api_key=st.secrets["OPENAI_API_KEY"]
 )
 
-VECTOR_STORE_ID = st.secrets["VECTOR_STORE_ID"]
+# Load dataset from GitHub repo
+@st.cache_data
+def load_data():
+    return pd.read_csv(
+        "data/branchout_dataset.csv"
+    )
+
+dataset = load_data()
+
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -15,11 +24,11 @@ if "messages" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.write(message["content"])
+        st.markdown(message["content"])
 
 
 if prompt := st.chat_input(
-    "Ask about brain health evidence..."
+    "Ask about neurological research..."
 ):
 
     st.session_state.messages.append(
@@ -29,48 +38,58 @@ if prompt := st.chat_input(
         }
     )
 
-    with st.chat_message("user"):
-        st.write(prompt)
+
+    # Search your dataset
+    matches = dataset[
+        dataset.apply(
+            lambda row:
+            row.astype(str)
+            .str.contains(
+                prompt,
+                case=False
+            ).any(),
+            axis=1
+        )
+    ]
 
 
-    instructions = """
-You are Evidence Explorer.
-
-You help users understand neurological research.
-
-Always:
-1. Search the uploaded Branch Out dataset first.
-2. Use Consensus MCP for scientific evidence.
-3. Clearly separate:
-   - Branch Out funded research
-   - broader scientific evidence
-4. Summarize evidence strength.
-5. Avoid medical recommendations.
-"""
-
-    response = client.responses.create(
-
-        model="gpt-4.1-mini",
-
-        instructions=instructions,
-
-        input=prompt,
-
-        tools=[
-            {
-                "type": "file_search",
-                "vector_store_ids": [
-                    VECTOR_STORE_ID
-                ]
-            }
-        ]
-
+    dataset_context = (
+        matches.head(10)
+        .to_string()
     )
 
-    answer = response.output_text
+
+    system_prompt = f"""
+You are Evidence Explorer.
+
+Use two sources:
+
+1. Branch Out dataset:
+{dataset_context}
+
+2. Consensus MCP:
+Use Consensus for scientific evidence.
+
+Rules:
+- Identify if information came from Branch Out data.
+- Identify broader scientific evidence separately.
+- Explain evidence strength.
+"""
 
 
     with st.chat_message("assistant"):
+
+        response = client.responses.create(
+
+            model="gpt-4.1-mini",
+
+            instructions=system_prompt,
+
+            input=prompt
+        )
+
+        answer = response.output_text
+
         st.write(answer)
 
 
