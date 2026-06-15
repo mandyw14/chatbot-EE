@@ -79,8 +79,8 @@ if prompt := st.chat_input("Ask a question about the dataset"):
         dataset_context = results.to_markdown(index=False)
         result_note = f"The dataset search returned {len(results)} result(s)."
 
-system_prompt = f"""
-You are a chatbot that answers questions using ONLY the provided dataset search results for scientific claims.
+    system_prompt = f"""
+You are a chatbot that answers questions ONLY using the provided dataset search results.
 
 Core rules:
 - Do not use papers that are not included in the dataset search results.
@@ -110,21 +110,13 @@ Suggested response format:
 ### Summary
 Briefly answer the user's question using only the dataset results.
 
-### General definition, if helpful
-Define any technical term the user may need to understand.
-
 ### Relevant papers from the dataset
+
 1. Paper title  
    Authors:  
    Year:  
-   Dataset-supported finding or relevance:  
+   Summary:  
    Link:  
-
-### Search limitations
-State if the search returned few results or if the dataset is limited.
-
-### You could also ask
-Suggest 1–3 related searches using only terms found in the dataset results.
 
 Search result note:
 {result_note}
@@ -133,8 +125,8 @@ Dataset search results:
 {dataset_context}
 """
 
-   with st.chat_message("assistant"):
-       stream = client.chat.completions.create(
+    with st.chat_message("assistant"):
+        stream = client.chat.completions.create(
             model=st.session_state["openai_model"],
             messages=[
                 {"role": "system", "content": system_prompt},
