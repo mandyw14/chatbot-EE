@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import re
 
-st.title("Dataset Chatbot")
+st.title("Branch Out Research Chatbot")
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
