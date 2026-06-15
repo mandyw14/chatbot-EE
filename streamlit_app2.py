@@ -1,56 +1,105 @@
-import streamlit as st
 from openai import OpenAI
+import streamlit as st
+import pandas as pd
+import re
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+st.title("Dataset Chatbot")
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+DATASET_PATH = "Dimensions-Publication.csv"
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+if "openai_model" not in st.session_state:
+    st.session_state["openai_model"] = "gpt-4o-mini"
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+@st.cache_data
+def load_dataset():
+    return pd.read_csv(DATASET_PATH)
 
-        # Generate a response using the OpenAI API.
+
+def search_dataset(query, df, max_results=12):
+    query_terms = re.findall(r"\w+", query.lower())
+
+    if not query_terms:
+        return pd.DataFrame()
+
+    searchable_df = df.fillna("").astype(str)
+
+    def row_score(row):
+        text = " ".join(row.values).lower()
+        return sum(1 for term in query_terms if term in text)
+
+    scored = searchable_df.copy()
+    scored["_score"] = searchable_df.apply(row_score, axis=1)
+
+    results = scored[scored["_score"] > 0]
+    results = results.sort_values("_score", ascending=False)
+
+    return results.drop(columns=["_score"]).head(max_results)
+
+
+df = load_dataset()
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+
+if prompt := st.chat_input("Ask a question about the dataset"):
+
+    st.session_state.messages.append(
+        {"role": "user", "content": prompt}
+    )
+
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    results = search_dataset(prompt, df)
+
+    if results.empty:
+        dataset_context = "NO RESULTS FOUND IN THE DATASET."
+        result_note = "The dataset search returned 0 results."
+    else:
+        dataset_context = results.to_markdown(index=False)
+        result_note = f"The dataset search returned {len(results)} result(s)."
+
+    system_prompt = f"""
+You are a chatbot that answers questions ONLY using the provided dataset search results.
+
+Strict rules:
+- Do not use outside knowledge.
+- Do not mention or rely on papers that are not included in the dataset search results.
+- If the search returns few results, say so clearly.
+- If the answer cannot be supported by the dataset results, say that the dataset does not contain enough information.
+- Do not invent authors, titles, journals, findings, dates, DOIs, or conclusions.
+- Keep answers concise and evidence-based.
+
+Search result note:
+{result_note}
+
+Dataset search results:
+{dataset_context}
+"""
+
+    with st.chat_message("assistant"):
         stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model=st.session_state["openai_model"],
             messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
+                {"role": "system", "content": system_prompt},
+                *[
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                ],
             ],
             stream=True,
         )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        response = st.write_stream(stream)
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": response}
+    )
