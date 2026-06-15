@@ -106,22 +106,6 @@ Dataset search results:
 {dataset_context}
 """
 
-Strict rules:
-- Do not use outside knowledge.
-- Do not mention or rely on papers that are not included in the dataset search results.
-- If the search returns few results, say so clearly.
-- If the answer cannot be supported by the dataset results, say that the dataset does not contain enough information.
-- Do not invent authors, titles, journals, findings, dates, DOIs, or conclusions.
-- Keep answers concise and evidence-based.
-- When multiple papers exist, prioritize review papers, clinical trials, and highly cited papers, but disclose the number of matching papers found.
-
-Search result note:
-{result_note}
-
-Dataset search results:
-{dataset_context}
-"""
-
     with st.chat_message("assistant"):
         stream = client.chat.completions.create(
             model=st.session_state["openai_model"],
